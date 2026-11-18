@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>進数変換計算機</title>
+<style>
+:root{--bg:#f6f7f9;--surface:#fff;--text:#1b1f24;--muted:#6b7480;--line:#d9dde3;--accent:#2457d6;--on-accent:#fff;--err:#c62828;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171b;--surface:#1d2127;--text:#e9ecf0;--muted:#97a0ab;--line:#333a43;--accent:#7aa2ff;--on-accent:#14171b;--err:#ff8a80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14171b;--surface:#1d2127;--text:#e9ecf0;--muted:#97a0ab;--line:#333a43;--accent:#7aa2ff;--on-accent:#14171b;--err:#ff8a80;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic",system-ui,sans-serif;line-height:1.6}
+main{max-width:520px;margin:0 auto;padding:32px 16px 48px}
+h1{font-size:1.4rem;margin:0 0 4px}
+p.sub{margin:0 0 20px;color:var(--muted);font-size:.9rem}
+h2{font-size:1rem;margin:24px 0 8px;display:flex;justify-content:space-between;align-items:center}
+.row{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:10px}
+.row:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+.row.bad{border-color:var(--err)}
+.head{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted)}
+.head .sp{flex:1}
+select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+.lnk{background:none;border:none;color:var(--accent);cursor:pointer;font:inherit;padding:0}
+.lnk.mut{color:var(--muted)}
+input{width:100%;border:none;background:transparent;color:var(--text);font:1.25rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;outline:none;padding:6px 0 2px;overflow-wrap:anywhere}
+.add{width:100%;font:inherit;cursor:pointer;background:none;color:var(--accent);border:1px dashed var(--line);border-radius:10px;padding:8px}
+.add:disabled{color:var(--muted);cursor:default}
+.msg{color:var(--err);font-size:.85rem;min-height:1.3em;margin:4px 2px 0}
+.save{margin-top:12px;display:flex;gap:8px;align-items:center}
+.save button{font:inherit;cursor:pointer;background:var(--accent);color:var(--on-accent);border:none;border-radius:8px;padding:8px 18px;font-weight:600}
+.hint{color:var(--muted);font-size:.85rem}
+.item{display:flex;gap:8px;align-items:stretch;margin-bottom:8px}
+.item .load{flex:1;text-align:left;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:.95rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;cursor:pointer;overflow-wrap:anywhere}
+.item .load:hover{border-color:var(--accent)}
+.item .load span{color:var(--muted);font-family:"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;font-size:.85rem}
+.item .del{background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:0 12px;cursor:pointer;font:inherit}
+.empty{color:var(--muted);font-size:.9rem}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<main>
+<h1>進数変換計算機</h1>
+<p class="sub">入力する進数を選んで値を入れると、変換先の進数に自動で変換します。</p>
+
+<div class="row" id="inRow">
+  <div class="head"><span>入力</span><select id="inBase" aria-label="入力する進数"></select></div>
+  <input id="inVal" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="0" aria-label="入力する値">
+</div>
+<div class="msg" id="msg" role="alert"></div>
+
+<h2>変換先 <span class="hint" id="cnt"></span></h2>
+<div id="outs"></div>
+<button class="add" type="button" id="addBtn">変換先を追加</button>
+
+<div class="save"><button type="button" id="saveBtn">入力した値を保存</button><span class="hint" id="saveHint"></span></div>
+<h2>保存した値 <button class="lnk mut" type="button" id="clearBtn">すべて削除</button></h2>
+<div id="list"></div>
+</main>
+
+<script>
+const DIGITS='0123456789abcdefghijklmnopqrstuvwxyz';
+const $=id=>document.getElementById(id);
+const inBase=$('inBase'),inVal=$('inVal'),msgEl=$('msg'),outsEl=$('outs'),addBtn=$('addBtn');
+function fillSelect(s,b){s.innerHTML='';for(let i=2;i<=36;i++){const o=document.createElement('option');o.value=i;o.textContent=i+'進数';if(i===b)o.selected=true;s.appendChild(o)}}
+function load(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(_){return d}}
+function store(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}
+
+let outs=load('bc2-outs',[2,16]);
+if(!Array.isArray(outs)||!outs.length)outs=[2,16];
+outs=outs.map(Number).filter(b=>b>=2&&b<=36);
+if(!outs.length)outs=[2,16];
+let inB=Number(load('bc2-in',10));if(!(inB>=2&&inB<=36))inB=10;
+fillSelect(inBase,inB);
+
+function parse(s,base){
+  s=s.trim().toLowerCase();
+  let neg=false;if(s.startsWith('-')){neg=true;s=s.slice(1)}
+  if(!s)return null;
+  let v=0n;const B=BigInt(base);
+  for(const ch of s){const i=DIGITS.indexOf(ch);if(i<0||i>=base)throw new Error('「'+ch+'」は'+base+'進数では使えません');v=v*B+BigInt(i)}
+  return neg?-v:v;
+}
+function fmt(v,base){return (v<0n?'-':'')+(v<0n?-v:v).toString(base).toUpperCase()}
+
+function buildOuts(){
+  outsEl.innerHTML='';
+  outs.forEach((b,i)=>{
+    const r=document.createElement('div');r.className='row';
+    const h=document.createElement('div');h.className='head';
+    const t=document.createElement('span');t.textContent='変換先 '+(i+1);
+    const s=document.createElement('select');s.setAttribute('aria-label','変換先'+(i+1)+'の進数');fillSelect(s,b);
+    s.onchange=()=>{outs[i]=Number(s.value);store('bc2-outs',outs);recalc()};
+    const sp=document.createElement('span');sp.className='sp';
+    const c=document.createElement('button');c.type='button';c.className='lnk';c.textContent='コピー';
+    c.onclick=async()=>{const v=r.querySelector('input').value;if(!v)return;try{await navigator.clipboard.writeText(v);c.textContent='コピーしました'}catch(_){c.textContent='コピーできません'}setTimeout(()=>c.textContent='コピー',1200)};
+    h.append(t,s,sp,c);
+    if(outs.length>1){const d=document.createElement('button');d.type='button';d.className='lnk mut';d.textContent='削除';d.onclick=()=>{outs.splice(i,1);store('bc2-outs',outs);buildOuts();recalc()};h.append(d)}
+    const inp=document.createElement('input');inp.readOnly=true;inp.placeholder='0';inp.setAttribute('aria-label','変換結果'+(i+1));
+    r.append(h,inp);outsEl.appendChild(r);
+  });
+  $('cnt').textContent=outs.length+'個';
+  
+  
+}
+function recalc(){
+  msgEl.textContent='';$('inRow').classList.remove('bad');
+  let v;
+  try{v=parse(inVal.value,inB)}catch(e){$('inRow').classList.add('bad');msgEl.textContent=e.message;v=null;outsEl.querySelectorAll('input').forEach(x=>x.value='');return}
+  outsEl.querySelectorAll('input').forEach((x,i)=>x.value=v===null?'':fmt(v,outs[i]));
+}
+inBase.onchange=()=>{
+  // 入力済みの値は新しい進数に読み替えず、同じ数値を保ったまま表記だけ変える
+  let v=null;try{v=parse(inVal.value,inB)}catch(_){}
+  inB=Number(inBase.value);store('bc2-in',inB);
+  if(v!==null)inVal.value=fmt(v,inB);
+  recalc();
+};
+inVal.addEventListener('input',recalc);
+addBtn.onclick=()=>{const next=[10,2,8,16,3,4,5,6,7,9,11,12,13,14,15].find(b=>!outs.includes(b));outs.push(next||10);store('bc2-outs',outs);buildOuts();recalc()};
+
+// ---- 保存(この端末のブラウザに保存) ----
+let saved=load('bc2-saved',[]);
+if(!Array.isArray(saved))saved=[];
+// 旧形式(10進数の文字列)を移行
+saved=saved.map(x=>typeof x==='string'?{base:10,text:x}:x).filter(x=>x&&x.base>=2&&x.base<=36&&typeof x.text==='string');
+function renderSaved(){
+  const L=$('list');L.innerHTML='';
+  if(!saved.length){const p=document.createElement('div');p.className='empty';p.textContent='保存した値はまだありません。';L.appendChild(p);return}
+  saved.forEach((s,i)=>{
+    const w=document.createElement('div');w.className='item';
+    const b=document.createElement('button');b.type='button';b.className='load';
+    const line=(base,txt,lbl)=>{const d=document.createElement('div');const q=document.createElement('span');q.textContent=lbl+base+'進数  ';d.append(q,document.createTextNode(txt));return d};
+    let sv=null;try{sv=parse(s.text,s.base)}catch(_){}
+    b.append(line(s.base,s.text.toUpperCase(),'入力 '));
+    if(Array.isArray(s.outs)&&sv!==null)s.outs.map(Number).filter(ob=>ob>=2&&ob<=36).forEach(ob=>b.append(line(ob,fmt(sv,ob),'→ ')));
+    b.onclick=()=>{inB=s.base;inBase.value=inB;store('bc2-in',inB);inVal.value=s.text.toUpperCase();const so=Array.isArray(s.outs)?s.outs.map(Number).filter(ob=>ob>=2&&ob<=36):[];if(so.length){outs=so;store('bc2-outs',outs);buildOuts()}recalc()};
+    const d=document.createElement('button');d.type='button';d.className='del';d.textContent='削除';d.setAttribute('aria-label','この値を削除');
+    d.onclick=()=>{saved.splice(i,1);store('bc2-saved',saved);renderSaved()};
+    w.append(b,d);L.appendChild(w);
+  });
+}
+$('saveBtn').onclick=()=>{
+  const h=$('saveHint');let v=null;
+  try{v=parse(inVal.value,inB)}catch(_){}
+  if(v===null){h.textContent='保存できる値を入力してください';return}
+  const text=fmt(v,inB).toLowerCase();
+  saved=saved.filter(x=>!(x.base===inB&&x.text.toLowerCase()===text));
+  saved.unshift({base:inB,text,outs:outs.slice()});saved=saved.slice(0,50);
+  store('bc2-saved',saved);renderSaved();h.textContent='保存しました';setTimeout(()=>h.textContent='',1500);
+};
+$('clearBtn').onclick=()=>{if(saved.length&&confirm('保存した値をすべて削除しますか?')){saved=[];store('bc2-saved',saved);renderSaved()}};
+
+buildOuts();renderSaved();recalc();
+</script>
+</body>
+</html>
